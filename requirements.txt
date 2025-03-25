@@ -1,0 +1,8 @@
+Flask
+gunicorn
+requests
+mysql-connector-python
+numpy
+sumy
+symspellpy
+bcrypt
