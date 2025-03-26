@@ -4,45 +4,41 @@ import mysql.connector
 import re
 from textblob import TextBlob
 from symspellpy import SymSpell
-#import bcrypt  # Import bcrypt for password hashing
 
-# Database connection details (replace with your own)
-DATABASE_HOST = "localhost"
-DATABASE_PORT = 3306
-DATABASE_USER = "root"
-DATABASE_PASSWORD = "admin"
-DATABASE_NAME = "prowc"
 
 # Flask app initialization
 app = Flask(__name__)
 
-# Configure secret key for session management (replace with a random string)
-    # app.config['SECRET_KEY'] = 'shshshs dddd'
+
 # Function to connect to MySQL database
+import os
+
 def get_db_connection():
     return mysql.connector.connect(
-        host=DATABASE_HOST,
-        user=DATABASE_USER,
-        password=DATABASE_PASSWORD,
-        database=DATABASE_NAME
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT", 3306)),  # Default to 3306 if no port
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASS"),
+        database=os.getenv("DB_NAME")
     )
-
 # Create the Signup table if it doesn't exist
-conn = get_db_connection()
-cursor = conn.cursor()
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS Signup (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL
-    )
-''')
-conn.commit()
-cursor.close()
-conn.close()
+def create_signup_table():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Signup (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL
+        )
+    ''')
+    conn.commit()
+    cursor.close()
+    conn.close()
 
-
+# Call this function 
+create_signup_table()
 # Route for registration form display
 @app.route('/register', methods=[ 'POST' ,'GET'])
 def register():
@@ -85,15 +81,6 @@ def register():
     return render_template('register.html', error_message = msg)
 
 
-# Secure password hashing function using bcrypt
-#def hash_password(password):
-    # Generate a random salt for each password
-    #salt = bcrypt.gensalt()
-    # Hash the password with the salt
-    #hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
-    ##def verify_password(password, hashed_password):
-    # Compare the password with the stored hash using the same salt
-   # return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
 
@@ -115,14 +102,6 @@ def login():
             error_message = "Invalid username or password."
             return render_template('login.html', error=error_message)
 
-        # Validate password hash using a secure password comparison method
-       # if not verify_password(password, user[3]):  # Implement secure password verification
-            #error_message = "Invalid username or password."
-           # return render_template('login.html', error=error_message)
-
-        # Successful login (implementation details omitted for brevity)
-        # ...
-
         return redirect(url_for('home'))  # Redirect to protected content after successful login
         # (assuming you have a 'home' or protected content route)
 
@@ -140,8 +119,12 @@ if not sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1):
     print("Error: Dictionary file not found or failed to load.")
 
 def spell_check(text):
+    if not text.strip():
+          return text  # Return original text if empty
+
     suggestions = sym_spell.lookup_compound(text, max_edit_distance=2)
     corrected_text = suggestions[0].term if suggestions else text
+
     
     # Ensure proper sentence formatting
     corrected_text = re.sub(r'([.!?])(\w)', r'\1 \2', corrected_text)  # Add space after punctuation
@@ -156,66 +139,7 @@ def spellchecker():
         corrected_text = spell_check(text)
         return render_template("spellchecker.html", original=text, corrected=corrected_text)
     return render_template("spellchecker.html")
-"""
-@app.route('/spellchecker', methods=['POST', 'GET'])
-def spellchecker():
-    if request.method == 'POST':
-        fieldvalues = request.form['fieldvalues']
-        url = "https://jspell-checker.p.rapidapi.com/check"
-        payload = {
-            "language":"enUS",
-            "fieldvalues":fieldvalues,
-            "config": {
-                "forceUpperCase": False,
-                "ignoreIrregularCaps": False,
-                "ignoreFirstCaps": True,
-                "ignoreNumbers": True,
-                "ignoreUpper": False,
-                "ignoreDouble": False,
-                "ignoreWordsWithNumbers": True,
-            }
-        }
-        headers = {
-            "content-type": "application/json",
-            "X-RapidAPI-Key":"ad8dd9e205msh1b46ee7d2f5246fp145c0bjsn4f9d4d717193",
-            "X-RapidAPI-Host": "jspell-checker.p.rapidapi.com"
-        }
-        response = requests.request("POST", url, json=payload, headers=headers)
-        response_dict = response.json()
-       
-        spelling_error_count = response_dict['spellingErrorCount'] 
 
-        if spelling_error_count == 0:
-                return render_template("spellchecker.html",fieldvalues=fieldvalues,speLling_error_count=spelling_error_count,response_dict = "no error")
-        else:
-            elements = response_dict['elements' ]
-            error_list = []
-            for element in elements:
-                error = element['errors'][0]
-                word = error['word']
-                position = error['position' ]
-                suggestions = error[ 'suggestions']
-                error_list.append((word, position, suggestions) )
-
-        return render_template("spellchecker.html", response_dict=response_dict,fieldvalues = fieldvalues)
-    else:
-        return render_template("spellchecker.html")
-        
-@app.route('/grammarcheck', methods=['POST','GET'])
-def grammarCheck():
-    if request.method == 'POST':
-        text = request.form['text']
-        blob = TextBlob(text)
-        sentiment = blob.sentiment.polarity
-        if sentiment==0.0:
-            sentiment='15.020'
-        else:
-            sentiment
-        noun_phrases = blob.noun_phrases
-        text_noun_phrases = "\n".join(noun_phrases)
-        return render_template('grammarcheck.html', sentiment=sentiment,noun_phrases=noun_phrases)
-    return render_template('grammarcheck.html')
-"""
 
 @app.route('/grammarcheck', methods=['POST', 'GET'])
 def grammar_check():
@@ -228,12 +152,11 @@ def grammar_check():
         errors = []
         corrected_text = text
 
-        for match in response.get("matches", []):
-            incorrect_word = match["context"]["text"]
-            suggestions = [sug["value"] for sug in match["replacements"]]
-
-            if suggestions:
-                corrected_text = corrected_text.replace(incorrect_word, suggestions[0], 1)
+       for match in response.get("matches", []):
+             incorrect_word = match["context"]["text"]
+             suggestions = [sug["value"] for sug in match["replacements"]]
+             if suggestions:
+                 corrected_text = corrected_text.replace(incorrect_word, suggestions[0], 1)  # Replace first occurrence only
 
             errors.append({
                 "message": match["message"],
@@ -254,8 +177,11 @@ from sumy.summarizers.lsa import LsaSummarizer
 def summarize():
     if request.method == 'POST':
         text = request.form['text']
-        num_sentences = int(request.form['num_sentences'])
-
+        num_sentences = request.form.get('num_sentences', '3')  # Default to 3 sentences
+        try:
+          num_sentences = int(num_sentences)
+        except ValueError:
+            num_sentences = 3
         # Using Sumy for summarization
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
         summarizer = LsaSummarizer()
